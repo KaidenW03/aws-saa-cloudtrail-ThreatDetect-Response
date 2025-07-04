@@ -1,0 +1,11 @@
+{
+  "detail": {
+    "eventName": ["ConsoleLogin"],
+    "userIdentity": {
+      "type": ["Root"]
+    },
+    "responseElements": {
+      "ConsoleLogin": ["Success"]
+    }
+  }
+}

@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Automated Threat Detection & Response for Root Console Logins
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Default: "you@example.com"
+    Description: Email address for security alerts
+
+Resources:
+
+  SecurityAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Security Alerts
+
+  SecurityAlertsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+      TopicArn: !Ref SecurityAlertsTopic
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: LambdaExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: "*"
+
+  ThreatDetectionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ThreatDetectionHandler
+      Handler: index.lambda_handler
+      Runtime: python3.12
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref SecurityAlertsTopic
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import logging
+          import os
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          sns_topic_arn = os.environ.get('SNS_TOPIC_ARN')
+
+          def lambda_handler(event, context):
+              logger.info("Received event: %s", json.dumps(event))
+              try:
+                  user_identity = event['detail']['userIdentity']['type']
+                  event_name = event['detail']['eventName']
+                  source_ip = event['detail']['sourceIPAddress']
+                  time = event['detail']['eventTime']
+
+                  message = f"""
+                  🚨 AWS Security Alert 🚨
+
+                  Suspicious activity detected in your AWS account!
+
+                  • Event: {event_name}
+                  • Identity Type: {user_identity}
+                  • Source IP: {source_ip}
+                  • Time: {time}
+
+                  Review this activity immediately.
+                  """
+
+                  sns = boto3.client('sns')
+                  sns.publish(
+                      TopicArn=sns_topic_arn,
+                      Message=message,
+                      Subject='[SECURITY ALERT] Root Login Detected'
+                  )
+
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps('Security alert sent successfully!')
+                  }
+
+              except Exception as e:
+                  logger.error("Error processing event: %s", str(e))
+                  return {
+                      'statusCode': 500,
+                      'body': json.dumps('Error in Lambda function')
+                  }
+
+  RootLoginEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: DetectRootLogin
+      EventPattern:
+        source:
+          - aws.signin
+        detail-type:
+          - "AWS Console Sign In via CloudTrail"
+        detail:
+          eventName:
+            - ConsoleLogin
+          userIdentity:
+            type:
+              - Root
+          responseElements:
+            ConsoleLogin:
+              - Success
+      Targets:
+        - Arn: !GetAtt ThreatDetectionFunction.Arn
+          Id: LambdaTarget
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ThreatDetectionFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt RootLoginEventRule.Arn
+
+Outputs:
+  SNSAlertEmail:
+    Description: Email used for receiving alerts
+    Value: !Ref AlertEmail
+  LambdaFunctionName:
+    Description: Lambda Function Name
+    Value: !Ref ThreatDetectionFunction
