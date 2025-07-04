@@ -35,30 +35,6 @@ Root Console Login > CloudTrail logs event > EventBridge > Lambda Function trigg
    - Use pattern from `event_pattern.json`
    - Set Lambda as the target
 
-## Screenshots
-
-### 1. SNS Email
-
-Shows the email alert sent to my inbox
-
-![SNS Email](Screenshots/sns-email.png)
-
----
-
-### 2. Lambda Logs
-
-Shows the Lambda Logs in AWS Console
-
-![Lambda Logs](Screenshots/lambda-logs.png)
-
----
-
-### 3. CloudTrail Event
-
-Shows the CloudTrail Event
-
-![CloudTrail Event](Screenshots/cloudtrail-event.png)
-
 ## Further Automation
 
 A .yaml script is included in this repo that can be run from AWS CLI to automatically recreate all aspects of this project.
